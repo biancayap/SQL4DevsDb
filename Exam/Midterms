@@ -1,0 +1,165 @@
+--#1
+USE SQL4DevsDb
+GO
+
+SELECT s.StoreId, s.StoreName 
+FROM Store  s
+WHERE NOT EXISTS (
+  SELECT StoreId 
+  FROM [Order] o
+  WHERE o.StoreId = s.StoreId
+)
+
+--#2
+USE SQL4DevsDb
+GO
+
+SELECT p.ProductId, p.ProductName, b.BrandName, c.CategoryName, SUM(oi.Quantity) as Quantity
+FROM [ORDER] o
+INNER JOIN OrderItem oi ON oi.OrderId = o.OrderId
+INNER JOIN Product p ON p.ProductId = oi.ProductId
+INNER JOIN Category c ON c.CategoryId = p.CategoryId
+INNER JOIN Brand b ON b.BrandId = p.BrandId
+WHERE p.ModelYear IN( 2017, 2018) AND o.StoreId = 2
+Group by p.ProductId, p.ProductName, c.CategoryName, b.BrandName, oi.Quantity
+ORDER BY Quantity DESC, p.ProductName
+
+--#3
+USE SQL4DevsDb
+GO
+
+SELECT s.StoreName,YEAR(o.OrderDate) as OrderYear, COUNT(DISTINCT o.OrderID) as OrderCount 
+FROM [Order] o
+JOIN OrderItem od ON o.OrderID = od.OrderID 
+JOIN Store s on s.StoreId = o.StoreId
+GROUP BY YEAR(o.OrderDate), StoreName
+ORDER BY S.StoreName, YEAR(o.OrderDate) DESC
+
+--#4
+USE SQL4DevsDb
+GO
+
+;WITH CTE_ORDERS AS (
+    SELECT b.BrandName, p.ProductId, p.ProductName, o.ListPrice
+FROM Brand b
+INNER JOIN Product p ON p.BrandId = b.BrandId
+INNER JOIN OrderItem o on o.ProductId = p.ProductId
+)
+, CTE_TOP_PRODUCTS AS (
+    SELECT *
+        , DENSE_RANK() OVER (PARTITION BY BrandName ORDER BY ListPrice DESC) AS [Ranking]
+    FROM CTE_ORDERS
+)
+SELECT BrandName, ProductId, ProductName, ListPrice
+FROM CTE_TOP_PRODUCTS
+WHERE [Ranking] < 5
+ORDER BY ProductName ASC, ListPrice DESC
+
+--#5
+USE SQL4DevsDb
+GO
+
+DECLARE
+@storeName VARCHAR(MAX),
+@orderYear VARCHAR(MAX),
+@orderCount VARCHAR(MAX);
+
+DECLARE cursor_product CURSOR
+FOR
+	SELECT s.StoreName,YEAR(o.OrderDate) as OrderYear, COUNT(DISTINCT o.OrderID) as OrderCount 
+	FROM [Order] o
+	JOIN OrderItem od ON o.OrderID = od.OrderID 
+	JOIN Store s on s.StoreId = o.StoreId
+	GROUP BY YEAR(o.OrderDate), StoreName
+	ORDER BY S.StoreName, YEAR(o.OrderDate) DESC;
+
+OPEN cursor_product;
+
+FETCH NEXT FROM cursor_product INTO 
+    @storeName, 
+    @orderYear,
+	@orderCount;
+
+WHILE @@FETCH_STATUS = 0
+    BEGIN
+        PRINT @storeName + ' ' + @orderYear + ' ' + @orderCount;
+        FETCH NEXT FROM cursor_product INTO 
+            @storeName, 
+            @orderYear,
+			@orderCount;
+    END;
+
+CLOSE cursor_product;
+
+DEALLOCATE cursor_product;
+
+--#6
+USE SQL4DevsDb
+GO
+
+DECLARE 
+@numOne INT,
+@numTwo INT
+
+SET @numOne = 1;
+
+WHILE (@numOne <= 10)
+BEGIN
+	SET @numTwo = 1
+	WHILE (@numTwo <= 10)
+		BEGIN
+			PRINT CONVERT(VARCHAR, @numOne) + ' * ' + CONVERT(VARCHAR, @numTwo) + ' = ' + 
+				  CONVERT(VARCHAR, @numOne * @numTwo)
+			SET @numTwo = @numTwo + 1
+		END
+	SET @numOne = @numOne + 1
+END
+
+--#7
+USE SQL4DevsDb
+GO
+
+SELECT YEAR(OrderDate) as SalesYear, FORMAT(OrderDate, 'MMM') as SalesMonth, ListPrice
+INTO #table1
+FROM [Order] o 
+INNER JOIN OrderItem oi ON oi.OrderId = o.OrderId
+
+SELECT SalesYear, SalesMonth, SUM(ListPrice) as MonthlySales
+INTO #table2
+FROM #table1
+GROUP BY SalesYear, SalesMonth
+
+SELECT SalesYear,
+		ISNULL([Jan], 0) as [Jan],
+		ISNULL([Feb], 0) as [Feb],
+		ISNULL([Mar], 0) as [Mar],
+		ISNULL([Apr], 0) as [Apr],
+		ISNULL([May], 0) as [May], 
+		ISNULL([Jun], 0) as [Jun],
+		ISNULL([Jul], 0) as [Jul],
+		ISNULL([Aug], 0) as [Aug],
+		ISNULL([Sep], 0) as [Sep],
+		ISNULL([Oct], 0) as [Oct],
+		ISNULL([Nov], 0) as [Nov],
+		ISNULL([Dec], 0) as [Dec]
+FROM #table2
+PIVOT
+(
+	SUM(MonthlySales) 
+	FOR SalesMonth IN (
+		[Jan], 
+		[Feb], 
+		[Mar], 
+		[Apr], 
+		[May], 
+		[Jun], 
+		[Jul],
+		[Aug], 
+		[Sep],
+		[Oct], 
+		[Nov],
+		[Dec])
+) AS PivotTable
+
+DROP TABLE #table1
+DROP TABLE #table2
